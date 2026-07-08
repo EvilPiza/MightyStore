@@ -11,4 +11,4 @@
 
 </div>
 
-A simple Kotlin-based addon for Cobalt that demonstrates addon structure, event handling, and custom features
+So like basically we are going to have a store for people to host their scripts within the mod, this is kinda useless if you use the discord server BUT the thing that will set us apart is that we can contact other mod developers for permission to port their mod into cobalt! this would increase the amount of cobalt users and we could potentially make some profit by having sponsored mods, ofc we could have "trusted" mods that have passed a rat check. i think this will also be a fun project so yk!
