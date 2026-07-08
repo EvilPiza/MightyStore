@@ -1,0 +1,7 @@
+{
+  "id": "${mod_id}",
+  "name": "Example Addon",
+  "version": "1.0.0",
+  "entrypoints": ["${base_group}.ExampleAddon"],
+  "mixins": ["${mod_id}.mixins.json"]
+}
