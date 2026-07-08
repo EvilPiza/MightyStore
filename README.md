@@ -1,5 +1,5 @@
 <h1 align = "center">
-  Example Addon
+  Mighty Store
 </h1>
 
 

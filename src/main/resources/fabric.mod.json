@@ -2,21 +2,21 @@
   "schemaVersion": 1,
   "id": "${mod_id}",
   "version": "${mod_version}",
-  "name": "Example Addon",
+  "name": "Mighty Store",
   "description": "",
-  "authors": ["Me!"],
+  "authors": ["Bloxfriend590"],
   "contact": {
     "homepage": "https://fabricmc.net/",
     "sources": "https://github.com/FabricMC/fabric-example-mod"
   },
   "license": "CC0-1.0",
-  "icon": "assets/exampleaddon/icon.png",
+  "icon": "assets/mightystore/icon.png",
   "environment": "*",
   "entrypoints": {
     "cobalt": [
       {
         "adapter": "kotlin",
-        "value": "com.example.ExampleAddon"
+        "value": "com.mighty.MightyStore"
       }
     ]
   },

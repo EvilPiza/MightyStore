@@ -26,7 +26,11 @@ dependencies {
     implementation("net.fabricmc:fabric-loader:${property("loader_version")}")
     implementation("net.fabricmc:fabric-language-kotlin:${property("fabric_kotlin_version")}")
     implementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_api_version")}")
-    implementation("com.github.CobaltScripts:Cobalt:master-SNAPSHOT")
+
+    implementation("com.github.CobaltScripts:Cobalt:master-SNAPSHOT") {
+        exclude(group = "com.jagrosh", module = "DiscordIPC")   // jagrosh's IPC fr doesnt work smh cobalt
+    }
+    implementation("io.github.CDAGaming:DiscordIPC:0.10.2")
 
     runtimeOnly("me.djtheredstoner:DevAuth-fabric:1.2.2")
 }

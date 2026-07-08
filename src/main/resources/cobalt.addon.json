@@ -1,7 +1,7 @@
 {
   "id": "${mod_id}",
-  "name": "Example Addon",
+  "name": "Mighty Store",
   "version": "1.0.0",
-  "entrypoints": ["${base_group}.ExampleAddon"],
+  "entrypoints": ["${base_group}.MightyStore"],
   "mixins": ["${mod_id}.mixins.json"]
 }
