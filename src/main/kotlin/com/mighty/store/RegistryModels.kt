@@ -18,6 +18,7 @@ data class RegistryAddon(
 data class RegistryVersion(
     val version: String,
     val cobaltVersion: String?,
+    val cobaltSha256: String?,
     val downloadUrl: String,
     val sha256: String,
     val changelog: String? = null

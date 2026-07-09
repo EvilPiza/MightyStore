@@ -1,7 +1,9 @@
 package com.mighty
 
+import com.mighty.module.StoreModule
 import org.cobalt.addon.Addon
 import org.cobalt.command.CommandManager
+import org.cobalt.module.ModuleManager
 import org.slf4j.LoggerFactory
 
 class MightyStore : Addon {
@@ -10,6 +12,8 @@ class MightyStore : Addon {
 
     override fun onLoad() {
         CommandManager.registerCommand(StoreCommand)
+        ModuleManager.addModule(StoreModule)
+
         logger.info("Mighty Store Loaded!")
     }
 

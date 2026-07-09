@@ -11,7 +11,6 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.zip.ZipFile
 import kotlin.io.path.name
-import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.loader.api.SemanticVersion
 import net.fabricmc.loader.api.metadata.version.VersionPredicate
 import net.minecraft.client.Minecraft
@@ -24,6 +23,7 @@ object AddonStore {
 
     private const val REGISTRY_URL =
         "https://raw.githubusercontent.com/EvilPiza/addon-registry/refs/heads/main/registry.json"
+    const val STORE_ADDON_ID = "mightystore"
     private const val CACHE_TTL_MS = 5 * 60 * 1000L
 
     private val logger = LoggerFactory.getLogger(this::class.java)
@@ -44,7 +44,15 @@ object AddonStore {
 
     private val restartPending = mutableSetOf<String>()
 
-    enum class AddonState { NOT_INSTALLED, INSTALLED, UPDATE_AVAILABLE, RESTART_PENDING, INCOMPATIBLE, DISABLED }
+    enum class AddonState { NOT_INSTALLED, INSTALLED, UPDATE_AVAILABLE, RESTART_PENDING, DISABLED }
+
+    sealed class CompatibilityStatus {
+        object Compatible : CompatibilityStatus()
+        object VerifiedByHash : CompatibilityStatus()
+        data class Warning(val reason: WarningReason, val message: String) : CompatibilityStatus()
+    }
+
+    enum class WarningReason { UNKNOWN_COBALT, UNVERIFIED_SNAPSHOT, HASH_MISMATCH, VERSION_MISMATCH, UNPARSEABLE_CONSTRAINT }
 
     data class InstalledAddon(
         val id: String,
@@ -105,7 +113,6 @@ object AddonStore {
 
     fun stateFor(addon: RegistryAddon): AddonState {
         if (addon.id in restartPending) return AddonState.RESTART_PENDING
-        if (!isCompatible(addon.latest?.cobaltVersion)) return AddonState.INCOMPATIBLE
 
         val installed = installedAddons().find { it.id == addon.id }
             ?: return AddonState.NOT_INSTALLED
@@ -116,22 +123,82 @@ object AddonStore {
         else AddonState.INSTALLED
     }
 
-    private fun isCompatible(constraint: String?): Boolean {
-        if (constraint.isNullOrBlank()) return true
-        return runCatching {
-            val cobalt = FabricLoader.getInstance().getModContainer("cobalt")
-                .orElseThrow().metadata.version
-            VersionPredicate.parse(constraint).test(cobalt)
-        }.getOrDefault(true)
+    fun compatibilityStatus(addon: RegistryAddon): CompatibilityStatus? =
+        addon.latest?.let { checkCompatibility(it) }
+
+    private fun checkCompatibility(version: RegistryVersion): CompatibilityStatus {
+        val constraint = version.cobaltVersion
+        if (constraint.isNullOrBlank()) return CompatibilityStatus.Compatible
+
+        val storeInstall = installedAddons().find { it.id == STORE_ADDON_ID }
+            ?: return CompatibilityStatus.Warning(
+                WarningReason.UNKNOWN_COBALT,
+                "Could not determine the installed Cobalt version"
+            )
+
+        if (constraint.equals("SNAPSHOT", ignoreCase = true)) {
+            return checkSnapshotCompatibility(version, storeInstall)
+        }
+
+        val installedVersion = runCatching { SemanticVersion.parse(storeInstall.version) }.getOrNull()
+            ?: return CompatibilityStatus.Warning(
+                WarningReason.UNKNOWN_COBALT,
+                "Could not parse the installed Cobalt version (\"${storeInstall.version}\")"
+            )
+
+        val predicate = runCatching { VersionPredicate.parse(constraint) }.getOrNull()
+            ?: return CompatibilityStatus.Warning(
+                WarningReason.UNPARSEABLE_CONSTRAINT,
+                "Couldn't parse this addon's Cobalt version requirement (\"$constraint\")"
+            )
+
+        return if (predicate.test(installedVersion)) {
+            CompatibilityStatus.Compatible
+        } else {
+            CompatibilityStatus.Warning(
+                WarningReason.VERSION_MISMATCH,
+                "This addon expects Cobalt $constraint — you may run into issues"
+            )
+        }
     }
+
+    private fun checkSnapshotCompatibility(
+        version: RegistryVersion,
+        storeInstall: InstalledAddon
+    ): CompatibilityStatus {
+        val expectedHash = version.cobaltSha256
+        if (expectedHash.isNullOrBlank()) {
+            return CompatibilityStatus.Warning(
+                WarningReason.UNVERIFIED_SNAPSHOT,
+                "This addon targets an unpinned Cobalt snapshot build — compatibility hasn't been verified"
+            )
+        }
+
+        val actualHash = runCatching { sha256(storeInstall.path) }.getOrNull()
+
+        return when {
+            actualHash == null -> CompatibilityStatus.Warning(
+                WarningReason.UNKNOWN_COBALT,
+                "Could not read the installed Cobalt build to verify it"
+            )
+            actualHash.equals(expectedHash, ignoreCase = true) -> CompatibilityStatus.VerifiedByHash
+            else -> CompatibilityStatus.Warning(
+                WarningReason.HASH_MISMATCH,
+                "This addon was tested against a different Cobalt snapshot than the one you're running"
+            )
+        }
+    }
+
 
     private fun isNewer(candidate: String, current: String): Boolean = runCatching {
         SemanticVersion.parse(candidate) > SemanticVersion.parse(current)
     }.getOrDefault(candidate != current)
 
     fun install(addon: RegistryAddon, version: RegistryVersion = requireNotNull(addon.latest)) {
-        require(isCompatible(version.cobaltVersion)) {
-            "${addon.name} ${version.version} requires Cobalt ${version.cobaltVersion}"
+        when (val compatibility = checkCompatibility(version)) {
+            is CompatibilityStatus.Warning ->
+                logger.warn("${addon.name} ${version.version} [${compatibility.reason}]: ${compatibility.message}")
+            CompatibilityStatus.Compatible, CompatibilityStatus.VerifiedByHash -> Unit
         }
 
         val fileName = "${addon.id}-${version.version}.jar"

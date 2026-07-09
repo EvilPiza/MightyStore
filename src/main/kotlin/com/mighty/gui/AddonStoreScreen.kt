@@ -1,7 +1,9 @@
 package com.mighty.gui
 
+import com.mighty.module.StoreModule.showCompatibilityWarnings
 import com.mighty.store.AddonStore
 import com.mighty.store.AddonStore.AddonState
+import com.mighty.store.AddonStore.WarningReason
 import com.mighty.store.RegistryAddon
 import net.minecraft.ChatFormatting
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -33,6 +35,8 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
     private var listLeft = 0
     private var listWidth = 0
 
+    private var updateStoreButton: Button? = null
+
     override fun init() {
         listLeft = width / 2 - 150
         listWidth = 300
@@ -45,8 +49,17 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
                 .build()
         )
 
+        updateStoreButton = addRenderableWidget(
+            Button.builder(Component.literal("Update")) { onUpdateStoreClicked() }
+                .bounds(width - 68, height - 28, 60, 20)
+                .build()
+        )
+        updateStoreButton?.visible = false
+        updateStoreButton?.active = false
+
         loadRegistry()
     }
+
 
     override fun onClose() {
         minecraft.gui.setScreen(parent)
@@ -70,6 +83,24 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
             }
         )
     }
+
+    private fun refreshUpdateButtonVisibility() {
+        val storeRow = (storeState as? StoreState.Loaded)
+            ?.rows?.find { it.addon.id == AddonStore.STORE_ADDON_ID }
+        val canUpdate = storeRow?.state == AddonStore.AddonState.UPDATE_AVAILABLE
+        updateStoreButton?.visible = canUpdate
+        updateStoreButton?.active = canUpdate
+    }
+
+    private fun onUpdateStoreClicked() {
+        val storeRow = (storeState as? StoreState.Loaded)
+            ?.rows?.find { it.addon.id == AddonStore.STORE_ADDON_ID } ?: return
+        AddonStore.async({ AddonStore.install(storeRow.addon) }) { result ->
+            result.onFailure { /* your existing error surface */ }
+            refreshUpdateButtonVisibility()
+        }
+    }
+
 
     private fun rebuildRowButtons() {
         val current = storeState
@@ -104,7 +135,7 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
     }
 
     private fun isActionable(state: AddonState): Boolean = when (state) {
-        AddonState.RESTART_PENDING, AddonState.INCOMPATIBLE -> false
+        AddonState.RESTART_PENDING -> false
         else -> true
     }
 
@@ -116,7 +147,6 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
             AddonState.UPDATE_AVAILABLE -> Component.literal("Update")
             AddonState.DISABLED -> Component.literal("Enable")
             AddonState.RESTART_PENDING -> Component.literal("Pending")
-            AddonState.INCOMPATIBLE -> Component.literal("Incompatible")
         }
     }
 
@@ -147,7 +177,7 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
                     onDone = { result -> onActionDone(row, result) }
                 )
             }
-            AddonState.RESTART_PENDING, AddonState.INCOMPATIBLE -> Unit
+            AddonState.RESTART_PENDING -> Unit
         }
     }
 
@@ -188,17 +218,33 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
                 graphics.text(font, label, width / 2 - font.width(label) / 2, height / 2, 0xFFFF5555.toInt(), true)
             }
             is StoreState.Loaded -> {
-                current.rows.forEachIndexed { index, row ->
+                val displayRows = current.rows.filterNot { it.addon.id == AddonStore.STORE_ADDON_ID }
+
+                displayRows.forEachIndexed { index, row ->
                     val y = rowY(index)
                     if (y + rowHeight <= listTop || y >= listBottom) return@forEachIndexed
+
+                    val warning = AddonStore.compatibilityStatus(row.addon) as? AddonStore.CompatibilityStatus.Warning
+                    var textLeft = listLeft
+                    if (warning != null) {
+                        val glyph = "⚠"
+                        graphics.text(font, glyph, listLeft, y + 2, 0xFFFFCC00.toInt(), true)
+                        textLeft = listLeft + font.width(glyph) + 4
+                    }
+
                     val nameLine = "${row.addon.name} (${row.addon.latest?.version ?: "?"})"
-                    graphics.text(font, nameLine, listLeft, y + 2, 0xFFFFFFFF.toInt(), true)
+                    graphics.text(font, nameLine, textLeft, y + 2, 0xFFFFFFFF.toInt(), true)
                     val stateLine = row.state.name.lowercase().replace('_', ' ')
-                    graphics.text(font, stateLine, listLeft, y + 13, 0xFF999999.toInt(), true)
+                    graphics.text(font, stateLine, textLeft, y + 13, 0xFF999999.toInt(), true)
+
+                    if (warning != null && showCompatibilityWarnings) {
+                        graphics.text(font, warning.message, textLeft, y + 24, 0xFFFFCC00.toInt(), true)
+                    }
                 }
+
                 if (AddonStore.restartRequired()) {
-                    val warning = Component.literal("Restart required to apply changes").withStyle(ChatFormatting.YELLOW)
-                    graphics.text(font, warning, width / 2 - font.width(warning) / 2, height - 40, 0xFFFFFF55.toInt(), true)
+                    val restartWarning = Component.literal("Restart required to apply changes").withStyle(ChatFormatting.YELLOW)
+                    graphics.text(font, restartWarning, width / 2 - font.width(restartWarning) / 2, height - 40, 0xFFFFFF55.toInt(), true)
                 }
             }
         }

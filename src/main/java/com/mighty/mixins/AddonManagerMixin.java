@@ -16,7 +16,6 @@ public class AddonManagerMixin {
     @Inject(method = "loadAddons$cobalt", at = @At("HEAD"))
     private static void mighty$flushPendingOps(CallbackInfo ci) {
         for (Path dir : AddonStore.INSTANCE.getAddonsDir()) {
-            System.out.println("[Debug MightyStore] " + dir);
             PendingOperations.apply(dir);
         }
     }
