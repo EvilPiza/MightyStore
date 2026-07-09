@@ -8,15 +8,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.nio.file.Path;
-
 @Mixin(AddonManager.class)
 public class AddonManagerMixin {
 
     @Inject(method = "loadAddons$cobalt", at = @At("HEAD"))
     private static void mighty$flushPendingOps(CallbackInfo ci) {
-        for (Path dir : AddonStore.INSTANCE.getAddonsDir()) {
-            PendingOperations.apply(dir);
-        }
+        PendingOperations.apply(AddonStore.INSTANCE.getAddonsDir());
     }
 }
