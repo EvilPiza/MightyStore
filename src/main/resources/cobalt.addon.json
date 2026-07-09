@@ -1,7 +1,7 @@
 {
   "id": "${mod_id}",
-  "name": "Mighty Store",
-  "version": "1.0.0",
+  "name": "${mod_name}",
+  "version": "${mod_version}",
   "entrypoints": ["${base_group}.MightyStore"],
   "mixins": ["${mod_id}.mixins.json"]
 }
