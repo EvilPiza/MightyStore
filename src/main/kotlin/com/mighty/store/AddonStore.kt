@@ -1,6 +1,8 @@
 package com.mighty.store
 
 import com.google.gson.Gson
+import net.fabricmc.loader.api.FabricLoader
+import net.fabricmc.loader.api.ModContainer
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -131,20 +133,20 @@ object AddonStore {
         val constraint = version.cobaltVersion
         if (constraint.isNullOrBlank()) return CompatibilityStatus.Compatible
 
-        val storeInstall = installedAddons().find { it.id == STORE_ADDON_ID }
+        val cobaltContainer = FabricLoader.getInstance().getModContainer("cobalt").orElse(null)
             ?: return CompatibilityStatus.Warning(
                 WarningReason.UNKNOWN_COBALT,
-                "Could not determine the installed Cobalt version"  // Possibly dev env
+                "Could not determine the installed Cobalt version"
             )
 
         if (constraint.equals("SNAPSHOT", ignoreCase = true)) {
-            return checkSnapshotCompatibility(version, storeInstall)
+            return checkSnapshotCompatibility(version, cobaltContainer)
         }
 
-        val installedVersion = runCatching { SemanticVersion.parse(storeInstall.version) }.getOrNull()
+        val installedVersion = runCatching { SemanticVersion.parse(cobaltContainer.metadata.version.friendlyString) }.getOrNull()
             ?: return CompatibilityStatus.Warning(
                 WarningReason.UNKNOWN_COBALT,
-                "Could not parse the installed Cobalt version (\"${storeInstall.version}\")"
+                "Could not parse the installed Cobalt version (\"${cobaltContainer.metadata.version.friendlyString}\")"
             )
 
         val predicate = runCatching { VersionPredicate.parse(constraint) }.getOrNull()
@@ -165,7 +167,7 @@ object AddonStore {
 
     private fun checkSnapshotCompatibility(
         version: RegistryVersion,
-        storeInstall: InstalledAddon
+        cobaltContainer: ModContainer
     ): CompatibilityStatus {
         val expectedHash = version.cobaltSha256
         if (expectedHash.isNullOrBlank()) {
@@ -175,7 +177,13 @@ object AddonStore {
             )
         }
 
-        val actualHash = runCatching { sha256(storeInstall.path) }.getOrNull()
+        val cobaltPath = cobaltContainer.origin.paths.firstOrNull()
+            ?: return CompatibilityStatus.Warning(
+                WarningReason.UNKNOWN_COBALT,
+                "Could not locate the installed Cobalt build to verify it"
+            )
+
+        val actualHash = runCatching { sha256(cobaltPath) }.getOrNull()
 
         return when {
             actualHash == null -> CompatibilityStatus.Warning(
