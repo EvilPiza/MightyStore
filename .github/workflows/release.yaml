@@ -1,0 +1,42 @@
+name: Update addon registry
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Download the release jar and hash it
+        run: |
+          curl -sL "${{ github.event.release.assets[0].browser_download_url }}" -o addon.jar
+          echo "sha256=$(sha256sum addon.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+        id: hash
+
+      - name: Checkout registry repo
+        uses: actions/checkout@v4
+        with:
+          repository: EvilPiza/addon-registry
+          token: ${{ secrets.REGISTRY_PUSH_TOKEN }}
+          path: registry
+
+      - name: Patch registry.json
+        run: |
+          jq --arg ver "${{ github.event.release.tag_name }}" \
+             --arg hash "${{ steps.hash.outputs.sha256 }}" \
+             --arg url "${{ github.event.release.assets[0].browser_download_url }}" \
+             '(.addons[] | select(.id == "mightystore") | .latest) = {version: $ver, downloadUrl: $url, sha256: $hash}' \
+             registry/registry.json > registry/registry.tmp.json
+          mv registry/registry.tmp.json registry/registry.json
+
+      - name: Commit and push
+        run: |
+          cd registry
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git commit -am "Update mightystore to ${{ github.event.release.tag_name }}"
+          git push

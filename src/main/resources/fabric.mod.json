@@ -6,8 +6,7 @@
   "description": "",
   "authors": ["Bloxfriend590"],
   "contact": {
-    "homepage": "https://fabricmc.net/",
-    "sources": "https://github.com/FabricMC/fabric-example-mod"
+    "sources": "https://github.com/EvilPiza/MightyStore"
   },
   "license": "CC0-1.0",
   "icon": "assets/mightystore/icon.png",
