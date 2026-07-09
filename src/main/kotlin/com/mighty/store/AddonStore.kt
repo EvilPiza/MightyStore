@@ -112,6 +112,7 @@ object AddonStore {
         }
 
     fun stateFor(addon: RegistryAddon): AddonState {
+        if (addon.id == STORE_ADDON_ID) return AddonState.INSTALLED
         if (addon.id in restartPending) return AddonState.RESTART_PENDING
 
         val installed = installedAddons().find { it.id == addon.id }
@@ -133,7 +134,7 @@ object AddonStore {
         val storeInstall = installedAddons().find { it.id == STORE_ADDON_ID }
             ?: return CompatibilityStatus.Warning(
                 WarningReason.UNKNOWN_COBALT,
-                "Could not determine the installed Cobalt version"
+                "Could not determine the installed Cobalt version"  // Possibly dev env
             )
 
         if (constraint.equals("SNAPSHOT", ignoreCase = true)) {

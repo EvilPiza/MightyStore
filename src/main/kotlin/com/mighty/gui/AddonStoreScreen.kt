@@ -23,24 +23,26 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
         val addon: RegistryAddon,
         var state: AddonState,
         var busyLabel: String? = null,
-        var button: Button? = null
+        var button: Button? = null,
+        var reportButton: Button? = null
     )
 
     private var storeState: StoreState = StoreState.Loading
     private var scrollOffset = 0
 
-    private val rowHeight = 26
+    private val rowHeight = 34
     private var listTop = 0
     private var listBottom = 0
     private var listLeft = 0
     private var listWidth = 0
 
     private var updateStoreButton: Button? = null
+    private var storeAddon: RegistryAddon? = null
 
     override fun init() {
         listLeft = width / 2 - 150
         listWidth = 300
-        listTop = 40
+        listTop = 54
         listBottom = height - 44
 
         addRenderableWidget(
@@ -73,9 +75,13 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
             task = { AddonStore.fetchRegistry() },
             onDone = { result ->
                 result.onSuccess { registry ->
-                    val rows = registry.addons.map { addon -> Row(addon, AddonStore.stateFor(addon)) }
+                    storeAddon = registry.addons.find { it.id == AddonStore.STORE_ADDON_ID }
+                    val rows = registry.addons
+                        .filterNot { it.id == AddonStore.STORE_ADDON_ID }
+                        .map { addon -> Row(addon, AddonStore.stateFor(addon)) }
                     storeState = StoreState.Loaded(rows)
                     rebuildRowButtons()
+                    refreshUpdateButtonVisibility()
                 }
                 result.onFailure { e ->
                     storeState = StoreState.Error(e.message ?: "Unknown error")
@@ -85,18 +91,16 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
     }
 
     private fun refreshUpdateButtonVisibility() {
-        val storeRow = (storeState as? StoreState.Loaded)
-            ?.rows?.find { it.addon.id == AddonStore.STORE_ADDON_ID }
-        val canUpdate = storeRow?.state == AddonStore.AddonState.UPDATE_AVAILABLE
+        val addon = storeAddon ?: return
+        val canUpdate = AddonStore.stateFor(addon) == AddonState.UPDATE_AVAILABLE
         updateStoreButton?.visible = canUpdate
         updateStoreButton?.active = canUpdate
     }
 
     private fun onUpdateStoreClicked() {
-        val storeRow = (storeState as? StoreState.Loaded)
-            ?.rows?.find { it.addon.id == AddonStore.STORE_ADDON_ID } ?: return
-        AddonStore.async({ AddonStore.install(storeRow.addon) }) { result ->
-            result.onFailure { /* your existing error surface */ }
+        val addon = storeAddon ?: return
+        AddonStore.async({ AddonStore.install(addon) }) { result ->
+            result.onFailure { }
             refreshUpdateButtonVisibility()
         }
     }
@@ -106,15 +110,24 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
         val current = storeState
         if (current !is StoreState.Loaded) return
 
-        current.rows.forEach { row -> row.button?.let { removeWidget(it) } }
+        current.rows.forEach { row ->
+            row.button?.let { removeWidget(it) }
+            row.reportButton?.let { removeWidget(it) }
+        }
 
         current.rows.forEachIndexed { index, row ->
-            val button = Button.builder(labelFor(row)) { performAction(row) }
-                .bounds(listLeft + listWidth - 90, rowY(index) + 3, 80, 20)
+            val action = Button.builder(labelFor(row)) { performAction(row) }
+                .bounds(listLeft + listWidth - 160, rowY(index) + 3, 70, 20)
                 .build()
-            button.active = isActionable(row.state)
-            row.button = button
-            addRenderableWidget(button)
+            action.active = isActionable(row.state)
+            row.button = action
+            addRenderableWidget(action)
+
+            val report = Button.builder(Component.literal("Report")) { }
+                .bounds(listLeft + listWidth - 85, rowY(index) + 3, 75, 20)
+                .build()
+            row.reportButton = report
+            addRenderableWidget(report)
         }
         updateRowVisibility()
     }
@@ -128,6 +141,10 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
             val y = rowY(index)
             val visible = y + rowHeight > listTop && y < listBottom
             row.button?.let {
+                it.setPosition(it.x, y + 3)
+                it.visible = visible
+            }
+            row.reportButton?.let {
                 it.setPosition(it.x, y + 3)
                 it.visible = visible
             }
@@ -218,13 +235,21 @@ class AddonStoreScreen(private val parent: Screen?) : Screen(Component.literal("
                 graphics.text(font, label, width / 2 - font.width(label) / 2, height / 2, 0xFFFF5555.toInt(), true)
             }
             is StoreState.Loaded -> {
-                val displayRows = current.rows.filterNot { it.addon.id == AddonStore.STORE_ADDON_ID }
+                val storeWarning = current.rows
+                    .mapNotNull { AddonStore.compatibilityStatus(it.addon) as? AddonStore.CompatibilityStatus.Warning }
+                    .find { it.reason == WarningReason.UNKNOWN_COBALT }
 
-                displayRows.forEachIndexed { index, row ->
+                if (storeWarning != null && showCompatibilityWarnings) {
+                    graphics.text(font, storeWarning.message, listLeft, 40, 0xFFFFCC00.toInt(), true)
+                }
+
+                current.rows.forEachIndexed { index, row ->
                     val y = rowY(index)
                     if (y + rowHeight <= listTop || y >= listBottom) return@forEachIndexed
 
-                    val warning = AddonStore.compatibilityStatus(row.addon) as? AddonStore.CompatibilityStatus.Warning
+                    val warning = (AddonStore.compatibilityStatus(row.addon) as? AddonStore.CompatibilityStatus.Warning)
+                        ?.takeUnless { it.reason == WarningReason.UNKNOWN_COBALT }
+
                     var textLeft = listLeft
                     if (warning != null) {
                         val glyph = "⚠"
