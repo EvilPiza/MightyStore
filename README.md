@@ -1,7 +1,6 @@
-<h1 align = "center">
+<h1 align="center">
   Mighty Store
 </h1>
-
 
 <div align="center">
 
@@ -11,4 +10,8 @@
 
 </div>
 
-So like basically we are going to have a store for people to host their scripts within the mod, this is kinda useless if you use the discord server BUT the thing that will set us apart is that we can contact other mod developers for permission to port their mod into cobalt! this would increase the amount of cobalt users and we could potentially make some profit by having sponsored mods, ofc we could have "trusted" mods that have passed a rat check. i think this will also be a fun project so yk!
+## About
+
+Mighty Store is an addon marketplace for Cobalt, letting people host and distribute their scripts directly within the mod.
+
+If you'd like to host your addon on Mighty Store, either make a pull request or DM me on discord (linked on my GitHub profile)! 
