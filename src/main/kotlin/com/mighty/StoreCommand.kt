@@ -1,6 +1,8 @@
 package com.mighty
 
+import com.mighty.gui.AddonStoreScreen
 import com.mighty.store.AddonStore
+import net.minecraft.client.Minecraft
 import org.cobalt.command.Command
 import org.cobalt.command.annotation.DefaultHandler
 import org.cobalt.command.annotation.SubCommand
@@ -14,7 +16,9 @@ object StoreCommand : Command(
 
     @DefaultHandler
     fun main() {
-        list()
+        Minecraft.getInstance().execute {
+            Minecraft.getInstance().gui.setScreen(AddonStoreScreen(Minecraft.getInstance().gui.screen()))
+        }
     }
 
     @SubCommand("list")
