@@ -1,7 +1,7 @@
-package com.mighty
+package com.mightystore
 
-import com.mighty.gui.AddonStoreScreen
-import com.mighty.store.AddonStore
+import com.mightystore.gui.AddonStoreScreen
+import com.mightystore.store.AddonStore
 import net.minecraft.client.Minecraft
 import org.cobalt.command.Command
 import org.cobalt.command.annotation.DefaultHandler

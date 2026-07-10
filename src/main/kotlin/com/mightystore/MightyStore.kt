@@ -1,6 +1,6 @@
-package com.mighty
+package com.mightystore
 
-import com.mighty.module.StoreModule
+import com.mightystore.module.StoreModule
 import org.cobalt.addon.Addon
 import org.cobalt.command.CommandManager
 import org.cobalt.module.ModuleManager

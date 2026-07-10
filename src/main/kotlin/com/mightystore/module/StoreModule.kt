@@ -1,4 +1,4 @@
-package com.mighty.module
+package com.mightystore.module
 
 import org.cobalt.module.Module
 import org.cobalt.module.ModuleCategory

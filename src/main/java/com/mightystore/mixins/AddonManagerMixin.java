@@ -1,7 +1,7 @@
-package com.mighty.mixins;
+package com.mightystore.mixins;
 
-import com.mighty.store.AddonStore;
-import com.mighty.store.PendingOperations;
+import com.mightystore.store.AddonStore;
+import com.mightystore.store.PendingOperations;
 import org.cobalt.addon.AddonManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

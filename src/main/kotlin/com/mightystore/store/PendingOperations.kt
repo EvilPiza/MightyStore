@@ -1,4 +1,4 @@
-package com.mighty.store
+package com.mightystore.store
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder

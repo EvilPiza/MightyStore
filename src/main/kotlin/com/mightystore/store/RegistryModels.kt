@@ -1,4 +1,4 @@
-package com.mighty.store
+package com.mightystore.store
 
 data class AddonRegistry(
     val schemaVersion: Int,

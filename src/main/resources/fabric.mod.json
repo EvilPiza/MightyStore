@@ -15,7 +15,13 @@
     "cobalt": [
       {
         "adapter": "kotlin",
-        "value": "com.mighty.MightyStore"
+        "value": "com.mightystore.MightyStore"
+      }
+    ],
+    "preLaunch": [
+      {
+        "adapter": "kotlin",
+        "value": "com.mightystore.JarIsInWrongFolder"
       }
     ]
   },

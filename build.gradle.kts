@@ -50,9 +50,11 @@ tasks {
         }
     }
 
-    jar {
-        exclude("fabric.mod.json")
-    }
+    //jar {
+    //    exclude("fabric.mod.json")
+    //}
+    // For any devs wondering why I did this, its because I have a check to make sure MightyStore isn't in the mods folder
+    // Usually you don't want the fabric.mod.json to be in the addon since it's basically bloat, but I need it for my case
 }
 
 java {

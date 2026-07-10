@@ -1,10 +1,10 @@
-package com.mighty.gui
+package com.mightystore.gui
 
-import com.mighty.module.StoreModule.showCompatibilityWarnings
-import com.mighty.store.AddonStore
-import com.mighty.store.AddonStore.AddonState
-import com.mighty.store.AddonStore.WarningReason
-import com.mighty.store.RegistryAddon
+import com.mightystore.module.StoreModule.showCompatibilityWarnings
+import com.mightystore.store.AddonStore
+import com.mightystore.store.AddonStore.AddonState
+import com.mightystore.store.AddonStore.WarningReason
+import com.mightystore.store.RegistryAddon
 import net.minecraft.ChatFormatting
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.Button
