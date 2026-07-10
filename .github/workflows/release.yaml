@@ -17,6 +17,40 @@ jobs:
           echo "sha256=$(sha256sum addon.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
         id: hash
 
+      - name: Wait for the current Cobalt SNAPSHOT build on JitPack
+        run: |
+          group_path="com/github/CobaltScripts"
+          artifact="Cobalt"
+          version="master-SNAPSHOT"
+          status_url="https://jitpack.io/api/builds/com.github.CobaltScripts/$artifact/$version"
+
+          status=""
+          for i in $(seq 1 30); do
+            status=$(curl -sL "$status_url" | jq -r '.status // empty')
+            echo "JitPack build status: $status"
+            if [ "$status" = "ok" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "$status" != "ok" ]; then
+            echo "JitPack build did not finish in time"
+            exit 1
+          fi
+
+          echo "group_path=$group_path" >> "$GITHUB_OUTPUT"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+        id: cobalt_build
+
+      - name: Download the built Cobalt jar and hash it
+        run: |
+          jar_url="https://jitpack.io/${{ steps.cobalt_build.outputs.group_path }}/${{ steps.cobalt_build.outputs.artifact }}/${{ steps.cobalt_build.outputs.version }}/${{ steps.cobalt_build.outputs.artifact }}-${{ steps.cobalt_build.outputs.version }}.jar"
+          curl -sL "$jar_url" -o cobalt.jar
+          echo "sha256=$(sha256sum cobalt.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+        id: cobalt_hash
+
       - name: Checkout registry repo
         uses: actions/checkout@v4
         with:
@@ -28,15 +62,4 @@ jobs:
         run: |
           jq --arg ver "${{ github.event.release.tag_name }}" \
              --arg hash "${{ steps.hash.outputs.sha256 }}" \
-             --arg url "${{ github.event.release.assets[0].browser_download_url }}" \
-             '(.addons[] | select(.id == "mightystore") | .latest) = {version: $ver, downloadUrl: $url, sha256: $hash}' \
-             registry/registry.json > registry/registry.tmp.json
-          mv registry/registry.tmp.json registry/registry.json
-
-      - name: Commit and push
-        run: |
-          cd registry
-          git config user.name "release-bot"
-          git config user.email "release-bot@users.noreply.github.com"
-          git commit -am "Update mightystore to ${{ github.event.release.tag_name }}"
-          git push
+             --arg url "${{
