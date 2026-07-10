@@ -1,8 +1,6 @@
 package com.mighty.store
 
 import com.google.gson.Gson
-import net.fabricmc.loader.api.FabricLoader
-import net.fabricmc.loader.api.ModContainer
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -13,9 +11,10 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.zip.ZipFile
 import kotlin.io.path.name
+import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.loader.api.SemanticVersion
-import net.fabricmc.loader.api.metadata.version.VersionPredicate
 import net.minecraft.client.Minecraft
+import org.cobalt.Cobalt
 import org.cobalt.Cobalt.configDir
 import org.cobalt.addon.AddonManager
 import org.cobalt.addon.AddonMetadata
@@ -54,7 +53,7 @@ object AddonStore {
         data class Warning(val reason: WarningReason, val message: String) : CompatibilityStatus()
     }
 
-    enum class WarningReason { UNKNOWN_COBALT, UNVERIFIED_SNAPSHOT, HASH_MISMATCH, VERSION_MISMATCH, UNPARSEABLE_CONSTRAINT }
+    enum class WarningReason { UNKNOWN_COBALT, UNVERIFIED, HASH_MISMATCH }
 
     data class InstalledAddon(
         val id: String,
@@ -129,75 +128,43 @@ object AddonStore {
     fun compatibilityStatus(addon: RegistryAddon): CompatibilityStatus? =
         addon.latest?.let { checkCompatibility(it) }
 
+    private fun currentCobaltJar(): Path? = runCatching {
+        Cobalt.MOD_CONTAINER.origin.paths.firstOrNull()
+    }.getOrNull()
+
     private fun checkCompatibility(version: RegistryVersion): CompatibilityStatus {
-        val constraint = version.cobaltVersion
-        if (constraint.isNullOrBlank()) return CompatibilityStatus.Compatible
-
-        val cobaltContainer = FabricLoader.getInstance().getModContainer("cobalt").orElse(null)
-            ?: return CompatibilityStatus.Warning(
-                WarningReason.UNKNOWN_COBALT,
-                "Could not determine the installed Cobalt version"
-            )
-
-        if (constraint.equals("SNAPSHOT", ignoreCase = true)) {
-            return checkSnapshotCompatibility(version, cobaltContainer)
-        }
-
-        val installedVersion = runCatching { SemanticVersion.parse(cobaltContainer.metadata.version.friendlyString) }.getOrNull()
-            ?: return CompatibilityStatus.Warning(
-                WarningReason.UNKNOWN_COBALT,
-                "Could not parse the installed Cobalt version (\"${cobaltContainer.metadata.version.friendlyString}\")"
-            )
-
-        val predicate = runCatching { VersionPredicate.parse(constraint) }.getOrNull()
-            ?: return CompatibilityStatus.Warning(
-                WarningReason.UNPARSEABLE_CONSTRAINT,
-                "Couldn't parse this addon's Cobalt version requirement (\"$constraint\")"
-            )
-
-        return if (predicate.test(installedVersion)) {
-            CompatibilityStatus.Compatible
-        } else {
-            CompatibilityStatus.Warning(
-                WarningReason.VERSION_MISMATCH,
-                "This addon expects Cobalt $constraint — you may run into issues"
-            )
-        }
-    }
-
-    private fun checkSnapshotCompatibility(
-        version: RegistryVersion,
-        cobaltContainer: ModContainer
-    ): CompatibilityStatus {
         val expectedHash = version.cobaltSha256
         if (expectedHash.isNullOrBlank()) {
             return CompatibilityStatus.Warning(
-                WarningReason.UNVERIFIED_SNAPSHOT,
-                "This addon targets an unpinned Cobalt snapshot build — compatibility hasn't been verified"
+                WarningReason.UNVERIFIED,
+                "This addon hasn't declared which Cobalt build it was tested against"
             )
         }
 
-        val cobaltPath = cobaltContainer.origin.paths.firstOrNull()
-            ?: return CompatibilityStatus.Warning(
-                WarningReason.UNKNOWN_COBALT,
-                "Could not locate the installed Cobalt build to verify it"
-            )
-
-        val actualHash = runCatching { sha256(cobaltPath) }.getOrNull()
-
-        return when {
-            actualHash == null -> CompatibilityStatus.Warning(
+        val jar = currentCobaltJar()
+        if (jar == null) {
+            if (FabricLoader.getInstance().isDevelopmentEnvironment) return CompatibilityStatus.Compatible
+            return CompatibilityStatus.Warning(
                 WarningReason.UNKNOWN_COBALT,
                 "Could not read the installed Cobalt build to verify it"
             )
-            actualHash.equals(expectedHash, ignoreCase = true) -> CompatibilityStatus.VerifiedByHash
-            else -> CompatibilityStatus.Warning(
+        }
+
+        val actualHash = runCatching { sha256(jar) }.getOrNull()
+            ?: return CompatibilityStatus.Warning(
+                WarningReason.UNKNOWN_COBALT,
+                "Could not read the installed Cobalt build to verify it"
+            )
+
+        return if (actualHash.equals(expectedHash, ignoreCase = true)) {
+            CompatibilityStatus.VerifiedByHash
+        } else {
+            CompatibilityStatus.Warning(
                 WarningReason.HASH_MISMATCH,
-                "This addon was tested against a different Cobalt snapshot than the one you're running"
+                "This addon was tested against a different Cobalt build — contact the addon developer, or check for a Cobalt update"
             )
         }
     }
-
 
     private fun isNewer(candidate: String, current: String): Boolean = runCatching {
         SemanticVersion.parse(candidate) > SemanticVersion.parse(current)
