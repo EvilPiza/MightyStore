@@ -62,4 +62,17 @@ jobs:
         run: |
           jq --arg ver "${{ github.event.release.tag_name }}" \
              --arg hash "${{ steps.hash.outputs.sha256 }}" \
-             --arg url "${{
+             --arg url "${{ github.event.release.assets[0].browser_download_url }}" \
+             --arg cobaltVer "${{ steps.cobalt_build.outputs.version }}" \
+             --arg cobaltHash "${{ steps.cobalt_hash.outputs.sha256 }}" \
+             '(.addons[] | select(.id == "mightystore") | .latest) = {version: $ver, cobaltVersion: $cobaltVer, cobaltSha256: $cobaltHash, downloadUrl: $url, sha256: $hash}' \
+             registry/registry.json > registry/registry.tmp.json
+          mv registry/registry.tmp.json registry/registry.json
+
+      - name: Commit and push
+        run: |
+          cd registry
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git commit -am "Update mightystore to ${{ github.event.release.tag_name }}"
+          git push
