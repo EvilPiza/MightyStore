@@ -113,7 +113,6 @@ object AddonStore {
         }
 
     fun stateFor(addon: RegistryAddon): AddonState {
-        if (addon.id == STORE_ADDON_ID) return AddonState.INSTALLED
         if (addon.id in restartPending) return AddonState.RESTART_PENDING
 
         val installed = installedAddons().find { it.id == addon.id }
