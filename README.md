@@ -14,4 +14,4 @@
 
 Mighty Store is an addon marketplace for Cobalt, letting people host and distribute their scripts directly within the mod.
 
-If you'd like to host your addon on Mighty Store, either make a pull request or DM me on discord (linked on my GitHub profile)! 
+If you'd like to host your addon on Mighty Store, either make a pull request!
