@@ -1,0 +1,12 @@
+﻿{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.mightystore.mixins",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "PreLaunchMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
