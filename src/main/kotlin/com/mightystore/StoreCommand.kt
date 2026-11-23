@@ -21,7 +21,7 @@ object StoreCommand : Command(
         }
     }
 
-    @SubCommand("list")
+    @SubCommand
     fun list() {
         AddonStore.async(
             task = { AddonStore.fetchRegistry() },
@@ -37,7 +37,7 @@ object StoreCommand : Command(
         )
     }
 
-    @SubCommand("install")
+    @SubCommand
     fun install(id: String) {
         AddonStore.async(
             task = {
@@ -56,7 +56,7 @@ object StoreCommand : Command(
         )
     }
 
-    @SubCommand("uninstall")
+    @SubCommand
     fun uninstall(id: String) {
         AddonStore.async(
             task = { AddonStore.uninstall(id) },

@@ -12,21 +12,21 @@
   "icon": "assets/mightystore/icon.png",
   "environment": "*",
   "entrypoints": {
-    "cobalt": [
+    "client": [
       {
         "adapter": "kotlin",
         "value": "com.mightystore.MightyStore"
       }
     ],
-    "preLaunch": [
+    "cobalt": [
       {
         "adapter": "kotlin",
-        "value": "com.mightystore.JarIsInWrongFolder"
+        "value": "com.mightystore.MightyStore"
       }
     ]
   },
   "mixins": [
-    "${mod_id}.mixins.json"
+    "mightystore.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=${loader_version}",

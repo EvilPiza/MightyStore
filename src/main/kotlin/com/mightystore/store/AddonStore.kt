@@ -15,7 +15,7 @@ import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.loader.api.SemanticVersion
 import net.minecraft.client.Minecraft
 import org.cobalt.Cobalt
-import org.cobalt.Cobalt.configDir
+
 import org.cobalt.addon.AddonManager
 import org.cobalt.addon.AddonMetadata
 import org.slf4j.LoggerFactory
@@ -38,7 +38,8 @@ object AddonStore {
         Thread(it, "mighty-addon-store").apply { isDaemon = true }
     }
 
-    val addonsDir: Path get() = configDir.resolve("addons").apply(Files::createDirectories)
+    val addonsDir: Path
+        get() = FabricLoader.getInstance().gameDir.resolve("config/cobalt/addons").apply(Files::createDirectories)
 
     private var cachedRegistry: AddonRegistry? = null
     private var cachedAt = 0L
@@ -112,24 +113,36 @@ object AddonStore {
             zip.getInputStream(entry).use { gson.fromJson(it.reader(), AddonMetadata::class.java) }
         }
 
-    fun stateFor(addon: RegistryAddon): AddonState {
+        fun installedById(): Map<String, InstalledAddon> = installedAddons().associateBy { it.id }
+
+    fun stateFor(addon: RegistryAddon, installed: Map<String, InstalledAddon> = installedById()): AddonState {
         if (addon.id in restartPending) return AddonState.RESTART_PENDING
-
-        val installed = installedAddons().find { it.id == addon.id }
-            ?: return AddonState.NOT_INSTALLED
-        if (!installed.enabled) return AddonState.DISABLED
-
+        val inst = installed[addon.id] ?: return AddonState.NOT_INSTALLED
+        if (!inst.enabled) return AddonState.DISABLED
         val latest = addon.latest ?: return AddonState.INSTALLED
-        return if (isNewer(latest.version, installed.version)) AddonState.UPDATE_AVAILABLE
-        else AddonState.INSTALLED
+        return if (isNewer(latest.version, inst.version)) AddonState.UPDATE_AVAILABLE else AddonState.INSTALLED
     }
-
-    fun compatibilityStatus(addon: RegistryAddon): CompatibilityStatus? =
+fun compatibilityStatus(addon: RegistryAddon): CompatibilityStatus? =
         addon.latest?.let { checkCompatibility(it) }
+
+    @Volatile private var cobaltJarHash: String? = null
+    @Volatile private var cobaltJarHashPath: Path? = null
 
     private fun currentCobaltJar(): Path? = runCatching {
         Cobalt.MOD_CONTAINER.origin.paths.firstOrNull()
     }.getOrNull()
+
+    private fun installedCobaltHash(): String? {
+        val jar = currentCobaltJar() ?: return null
+        cobaltJarHash?.let { if (cobaltJarHashPath == jar) return it }
+        synchronized(this) {
+            cobaltJarHash?.let { if (cobaltJarHashPath == jar) return it }
+            val hash = runCatching { sha256(jar) }.getOrNull()
+            cobaltJarHash = hash
+            cobaltJarHashPath = jar
+            return hash
+        }
+    }
 
     private fun checkCompatibility(version: RegistryVersion): CompatibilityStatus {
         val expectedHash = version.cobaltSha256
@@ -149,7 +162,7 @@ object AddonStore {
             )
         }
 
-        val actualHash = runCatching { sha256(jar) }.getOrNull()
+        val actualHash = installedCobaltHash()
             ?: return CompatibilityStatus.Warning(
                 WarningReason.UNKNOWN_COBALT,
                 "Could not read the installed Cobalt build to verify it"
@@ -160,82 +173,49 @@ object AddonStore {
         } else {
             CompatibilityStatus.Warning(
                 WarningReason.HASH_MISMATCH,
-                "This addon was tested against a different Cobalt build — contact the addon developer, or check for a Cobalt update"
+                "This addon was tested against a different Cobalt build - contact the addon developer, or check for a Cobalt update"
             )
         }
     }
-
-    private fun isNewer(candidate: String, current: String): Boolean = runCatching {
+private fun isNewer(candidate: String, current: String): Boolean = runCatching {
         SemanticVersion.parse(candidate) > SemanticVersion.parse(current)
     }.getOrDefault(candidate != current)
 
     fun install(addon: RegistryAddon, version: RegistryVersion = requireNotNull(addon.latest)) {
         when (val compatibility = checkCompatibility(version)) {
-            is CompatibilityStatus.Warning ->
-                logger.warn("${addon.name} ${version.version} [${compatibility.reason}]: ${compatibility.message}")
-            CompatibilityStatus.Compatible, CompatibilityStatus.VerifiedByHash -> Unit
+            is CompatibilityStatus.Warning -> logger.warn("${addon.name} ${version.version} [${compatibility.reason}]: ${compatibility.message}")
+            else -> Unit
         }
-
         val fileName = "${addon.id}-${version.version}.jar"
         val staging = addonsDir.resolve(PendingOperations.STAGING_DIR).apply(Files::createDirectories)
         val staged = staging.resolve(fileName)
-
-        val request = HttpRequest.newBuilder(URI.create(version.downloadUrl)).GET().build()
-        val response = http.send(request, BodyHandlers.ofFile(staged))
-        check(response.statusCode() == 200) {
-            Files.deleteIfExists(staged)
-            "Download failed: HTTP ${response.statusCode()}"
-        }
-
+        val response = http.send(HttpRequest.newBuilder(URI.create(version.downloadUrl)).GET().build(), BodyHandlers.ofFile(staged))
+        check(response.statusCode() == 200) { Files.deleteIfExists(staged); "Download failed: HTTP ${response.statusCode()}" }
         val actual = sha256(staged)
-        if (!actual.equals(version.sha256, ignoreCase = true)) {
-            Files.deleteIfExists(staged)
-            error("Checksum mismatch for ${addon.name} ${version.version} — refusing to install")
-        }
-
+        if (!actual.equals(version.sha256, ignoreCase = true)) { Files.deleteIfExists(staged); error("Checksum mismatch for ${addon.name} ${version.version} — refusing to install") }
         val manifest = readManifest(staged)
-        check(manifest.id == addon.id) {
-            Files.deleteIfExists(staged)
-            "Manifest id '${manifest.id}' doesn't match registry id '${addon.id}'"
-        }
-
-        val existing = installedAddons().find { it.id == addon.id }
+        check(manifest.id == addon.id) { Files.deleteIfExists(staged); "Manifest id '${manifest.id}' doesn't match registry id '${addon.id}'" }
+        val existing = installedById()[addon.id]
         when {
             existing == null -> Files.move(staged, addonsDir.resolve(fileName))
-            isLoaded(addon.id) ->
-                PendingOperations.queueReplace(addonsDir, existing.path.name, fileName)
-            else -> {
-                Files.deleteIfExists(existing.path)
-                Files.move(staged, addonsDir.resolve(fileName))
-            }
+            isLoaded(addon.id) -> PendingOperations.queueReplace(addonsDir, existing.path.name, fileName)
+            else -> { Files.deleteIfExists(existing.path); Files.move(staged, addonsDir.resolve(fileName)) }
         }
         restartPending += addon.id
     }
 
     fun uninstall(id: String) {
-        val installed = installedAddons().find { it.id == id } ?: return
-        if (isLoaded(id)) {
-            PendingOperations.queueDelete(addonsDir, installed.path.name)
-            restartPending += id
-        } else {
-            Files.deleteIfExists(installed.path)
-        }
+        val installed = installedById()[id] ?: return
+        if (isLoaded(id)) { PendingOperations.queueDelete(addonsDir, installed.path.name); restartPending += id }
+        else Files.deleteIfExists(installed.path)
     }
 
     fun setEnabled(id: String, enabled: Boolean) {
-        val installed = installedAddons().find { it.id == id } ?: return
+        val installed = installedById()[id] ?: return
         if (installed.enabled == enabled) return
-
-        val newName =
-            if (enabled) installed.path.name.removeSuffix(".disabled")
-            else "${installed.path.name}.disabled"
-
-        if (isLoaded(id)) {
-            PendingOperations.queueRename(addonsDir, installed.path.name, newName)
-            restartPending += id
-        } else {
-            Files.move(installed.path, installed.path.resolveSibling(newName))
-        }
+        val newName = if (enabled) installed.path.name.removeSuffix(".disabled") else "${installed.path.name}.disabled"
+        if (isLoaded(id)) PendingOperations.queueRename(addonsDir, installed.path.name, newName)
+        else Files.move(installed.path, installed.path.resolveSibling(newName))
         restartPending += id
     }
 

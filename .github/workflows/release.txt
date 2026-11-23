@@ -12,44 +12,37 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download the release jar and hash it
-        run: |
-          curl -sL "${{ github.event.release.assets[0].browser_download_url }}" -o addon.jar
-          echo "sha256=$(sha256sum addon.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
         id: hash
-
-      - name: Wait for the current Cobalt SNAPSHOT build on JitPack
         run: |
-          group_path="com/github/CobaltScripts"
-          artifact="Cobalt"
-          version="master-SNAPSHOT"
-          status_url="https://jitpack.io/api/builds/com.github.CobaltScripts/$artifact/$version"
+          curl -fsSL "${{ github.event.release.assets[0].browser_download_url }}" -o addon.jar
+          echo "sha256=$(sha256sum addon.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-          status=""
-          for i in $(seq 1 30); do
-            status=$(curl -sL "$status_url" | jq -r '.status // empty')
-            echo "JitPack build status: $status"
-            if [ "$status" = "ok" ]; then
-              break
-            fi
-            sleep 10
-          done
+      - name: Resolve the latest Cobalt release
+        id: cobalt_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release=$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/CobaltMod/Cobalt/releases/latest)
 
-          if [ "$status" != "ok" ]; then
-            echo "JitPack build did not finish in time"
+          tag=$(echo "$release" | jq -r '.tag_name')
+          url=$(echo "$release" | jq -r '[.assets[] | select(.name | endswith(".jar")) | select(.name | test("sources|dev|javadoc") | not)][0].browser_download_url')
+
+          if [ -z "$tag" ] || [ "$tag" = "null" ] || [ -z "$url" ] || [ "$url" = "null" ]; then
+            echo "Could not resolve the Cobalt release or its jar"
             exit 1
           fi
 
-          echo "group_path=$group_path" >> "$GITHUB_OUTPUT"
-          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-        id: cobalt_build
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
-      - name: Download the built Cobalt jar and hash it
-        run: |
-          jar_url="https://jitpack.io/${{ steps.cobalt_build.outputs.group_path }}/${{ steps.cobalt_build.outputs.artifact }}/${{ steps.cobalt_build.outputs.version }}/${{ steps.cobalt_build.outputs.artifact }}-${{ steps.cobalt_build.outputs.version }}.jar"
-          curl -sL "$jar_url" -o cobalt.jar
-          echo "sha256=$(sha256sum cobalt.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Download the Cobalt jar and hash it
         id: cobalt_hash
+        run: |
+          curl -fsSL "${{ steps.cobalt_release.outputs.url }}" -o cobalt.jar
+          echo "sha256=$(sha256sum cobalt.jar | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout registry repo
         uses: actions/checkout@v4
@@ -63,9 +56,10 @@ jobs:
           jq --arg ver "${{ github.event.release.tag_name }}" \
              --arg hash "${{ steps.hash.outputs.sha256 }}" \
              --arg url "${{ github.event.release.assets[0].browser_download_url }}" \
-             --arg cobaltVer "${{ steps.cobalt_build.outputs.version }}" \
+             --arg cobaltVer "${{ steps.cobalt_release.outputs.tag }}" \
+             --arg cobaltUrl "${{ steps.cobalt_release.outputs.url }}" \
              --arg cobaltHash "${{ steps.cobalt_hash.outputs.sha256 }}" \
-             '(.addons[] | select(.id == "mightystore") | .latest) = {version: $ver, cobaltVersion: $cobaltVer, cobaltSha256: $cobaltHash, downloadUrl: $url, sha256: $hash}' \
+             '(.addons[] | select(.id == "mightystore") | .latest) = {version: $ver, cobaltVersion: $cobaltVer, cobaltUrl: $cobaltUrl, cobaltSha256: $cobaltHash, downloadUrl: $url, sha256: $hash}' \
              registry/registry.json > registry/registry.tmp.json
           mv registry/registry.tmp.json registry/registry.json
 

@@ -27,8 +27,8 @@ dependencies {
     implementation("net.fabricmc:fabric-language-kotlin:${property("fabric_kotlin_version")}")
     implementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_api_version")}")
 
-    implementation("com.github.CobaltScripts:Cobalt:master-SNAPSHOT") {
-        exclude(group = "com.jagrosh", module = "DiscordIPC")   // jagrosh's IPC fr doesnt work smh cobalt
+    implementation("com.github.CobaltMod:Cobalt:${property("cobalt_version")}") {
+        exclude(group = "com.jagrosh", module = "DiscordIPC")
     }
     implementation("io.github.CDAGaming:DiscordIPC:0.10.2")
 
@@ -37,9 +37,7 @@ dependencies {
 
 tasks {
     processResources {
-        val modId = providers.gradleProperty("mod_id").get()
-
-        filesMatching(listOf("cobalt.addon.json", "fabric.mod.json", "$modId.mixins.json")) {
+        filesMatching(listOf("cobalt.addon.json", "fabric.mod.json")) {
             expand(getProperties())
         }
     }
@@ -49,12 +47,6 @@ tasks {
             jvmTarget = JvmTarget.JVM_25
         }
     }
-
-    //jar {
-    //    exclude("fabric.mod.json")
-    //}
-    // For any devs wondering why I did this, its because I have a check to make sure MightyStore isn't in the mods folder
-    // Usually you don't want the fabric.mod.json to be in the addon since it's basically bloat, but I need it for my case
 }
 
 java {
